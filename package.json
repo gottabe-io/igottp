@@ -1,0 +1,32 @@
+{
+  "name": "igottp",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "typings": "index.d.ts",
+  "engines": {
+    "node": ">=16.0.0",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "scripts": {
+    "prepublish": "npm run build",
+    "build": "tsc --outDir .",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "gottabe-io",
+    "http",
+    "client"
+  ],
+  "author": "gottabe.io",
+  "license": "BSD-3-Clause",
+  "bugs": {
+    "url": "https://github.com/gottabe-io/igottp/issues"
+  },
+  "homepage": "https://github.com/gottabe-io/igottp#readme",
+  "devDependencies": {
+    "typedoc": "^0.22.0",
+    "typedoc-plugin-markdown": "^3.12.1",
+    "typescript": "^4.3.5"
+  }
+}
