@@ -343,7 +343,8 @@ function createBlobOptions(ent:any, instance: any, options?:any) {
 const insertQueryParams = (url:string, params:any) => {
     let _url = new URL(url);
     Object.entries(params).forEach((e, i) => {
-        _url.searchParams.append(e[0], <string>e[1] || '');
+        if (typeof e[1] != 'undefined' && e[1] != null)
+        _url.searchParams.append(e[0], <string>e[1]);
     });
     return _url.toString();
 };
