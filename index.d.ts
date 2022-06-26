@@ -387,16 +387,37 @@ export interface HttpClientBuilder {
      */
     withResponseHeadersCallback(responseHeadersCallback: HeaderGetCallback): HttpClientBuilder;
     /**
-     * Specifies the type of the request for all requests.
+     * Specifies the accepted type of the response for all requests.
      * <p>Possible types are:</p>
      * <ul>
-     * <li>'json' - when this type is set the client will serialize and deserialize the bodies of the request and response to JSON</li>
-     * <li>'blob' - with this value the client will send the data as FormData and the response will be converted to Blob</li>
-     * <li>'form' - this type will clients send data as FormData and it will return the default response from fetch</li>
+     * <li>'json' - when this type is set the client will deserialize the response to JSON</li>
+     * <li>'blob' - with this value the client will be convert the response to Blob</li>
+     * <li>'text' - using this type, the response will be returned as text</li>
+     * </ul>
+     * @param type the type of the responses accepted
+     */
+    withAcceptType(type: string): HttpClientBuilder;
+    /**
+     * Specifies the content type of the request for all requests.
+     * <p>Possible types are:</p>
+     * <ul>
+     * <li>'json' - when this type is set the client will serialize the body of the request</li>
+     * <li>'blob' - with this value the client will send the data as FormData</li>
+     * <li>'form' - this type will clients send data as FormData</li>
      * </ul>
      * @param type the type of the requests
      */
     withType(type: string): HttpClientBuilder;
+    /**
+     * Sets option mode for all requests
+     * @param mode the mode
+     */
+    withMode(mode: string): HttpClientBuilder;
+    /**
+     * Sets option cache for all requests
+     * @param mode the mode
+     */
+    withCache(cache: string): HttpClientBuilder;
     /**
      * Sets a Charset to be used
      * @param charset the charset
@@ -417,7 +438,10 @@ declare class DefaultHttpClientBuilder implements HttpClientBuilder {
     predefHeaders?: any;
     headerSetCallback?: HeaderSetCallback;
     responseHeadersCallback?: HeaderGetCallback;
+    acceptType?: string;
     type?: string;
+    mode?: string;
+    cache?: string;
     charset?: string;
     fetchInvoker?: FetchInvoker;
     /**
@@ -440,6 +464,7 @@ declare class DefaultHttpClientBuilder implements HttpClientBuilder {
      * @param responseHeadersCallback the callback function
      */
     withResponseHeadersCallback(responseHeadersCallback: HeaderGetCallback): this;
+    withAcceptType(type: string): HttpClientBuilder;
     /**
      * Specifies the type of the request for all requests.
      * <p>Possible types are:</p>
@@ -451,6 +476,16 @@ declare class DefaultHttpClientBuilder implements HttpClientBuilder {
      * @param type the type of the requests
      */
     withType(type: string): this;
+    /**
+     * Sets option mode for all requests
+     * @param mode the mode
+     */
+    withMode(mode: string): this;
+    /**
+     * Sets option cache for all requests
+     * @param cache the mode
+     */
+    withCache(cache: string): this;
     /**
      * Sets a Charset to be used
      * @param charset the charset
@@ -471,3 +506,4 @@ declare class DefaultHttpClientBuilder implements HttpClientBuilder {
  */
 export declare const builder: () => HttpClientBuilder;
 export {};
+//# sourceMappingURL=index.d.ts.map

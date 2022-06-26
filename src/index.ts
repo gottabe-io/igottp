@@ -340,13 +340,14 @@ function createBlobOptions(ent:any, instance: any, options?:any) {
     });
 }
 
-const insertQueryParams = (url:string, params:any) => {
-    let _url = new URL(url);
-    Object.entries(params).forEach((e, i) => {
-        if (typeof e[1] != 'undefined' && e[1] != null)
-        _url.searchParams.append(e[0], <string>e[1]);
-    });
-    return _url.toString();
+const insertQueryParams = (url:string, baseUrl: string | undefined, params:any) => {
+    let _url = new URL(url,baseUrl || 'http://dummy');
+    if (params)
+        Object.entries(params).forEach((e, i) => {
+            if (typeof e[1] != 'undefined' && e[1] != null)
+            _url.searchParams.append(e[0], <string>e[1]);
+        });
+    return !baseUrl ? _url.toString().substring(12) : _url.toString();
 };
 
 /**
@@ -418,7 +419,7 @@ function setAcceptHeader(type: string | undefined, charset: string | undefined, 
 }
 
 function getType(param: any, options: any) {
-    return options.type || param.type;
+    return (options || {}).type || param.type;
 }
 
 class DefaultHttpClient implements HttpClient {
@@ -426,15 +427,21 @@ class DefaultHttpClient implements HttpClient {
     predefHeaders?: any;
     headerSetCallback?: HeaderSetCallback;
     responseHeadersCallback?: HeaderGetCallback;
+    acceptType?: string;
     type?: string;
+    mode?: string;
+    cache?: string;
     charset?: string;
     fetchInvoker: FetchInvoker;
-    constructor(baseUrl?: string, predefHeaders?: any, headerSetCallback?: HeaderSetCallback, responseHeadersCallback?: HeaderGetCallback, type?: string, charset?: string, fetchInvoker?: FetchInvoker) {
+    constructor(baseUrl?: string, predefHeaders?: any, headerSetCallback?: HeaderSetCallback, responseHeadersCallback?: HeaderGetCallback, acceptType?: string, type?: string, mode?: string, cache?: string, charset?: string, fetchInvoker?: FetchInvoker) {
         this.baseUrl = baseUrl;
         this.predefHeaders = predefHeaders;
         this.headerSetCallback = headerSetCallback;
         this.responseHeadersCallback = responseHeadersCallback;
+        this.acceptType = acceptType;
         this.type = type;
+        this.mode = mode;
+        this.cache = cache;
         this.charset = charset;
         this.fetchInvoker = fetchInvoker || ((url: string, options?: any) => fetch(url, options));
     }
@@ -488,12 +495,13 @@ class DefaultHttpClient implements HttpClient {
         if (this.predefHeaders)
             Object.assign(options.headers || {}, this.predefHeaders);
         this.headerSetCallback && this.headerSetCallback(options.headers);
-        if (this.baseUrl && !url.startsWith('http://') && !url.startsWith('https://'))
-            url = this.baseUrl + (this.baseUrl.startsWith('/') ? '' : '/') + (url.startsWith('/') ? url.substring(1) : url);
-        if (options.hasOwnProperty('params'))
-            url = insertQueryParams(url, options.params);
-        let type = getType(this, options);
-        setAcceptHeader(type, this.charset, options.headers);
+        url = insertQueryParams(url, options.baseUrl || this.baseUrl, options.params);
+        let acceptType = options.acceptType || this.acceptType;
+        setAcceptHeader(acceptType, this.charset, options.headers);
+        if (this.cache && !options.cache)
+            options.cache = this.cache;
+        if (this.mode && !options.mode)
+            options.mode = this.mode;
         let resp = await this.fetchInvoker(url, options);
         this.responseHeadersCallback && this.responseHeadersCallback(resp.headers);
         if (resp.status >= 400 || resp.status < 100) {
@@ -502,11 +510,12 @@ class DefaultHttpClient implements HttpClient {
             throw error;
         } else {
             let contentType = resp.headers.get(HttpHeaders.CONTENT_TYPE) || '';
-            let contentLength = parseInt(resp.headers.get(HttpHeaders.CONTENT_LENGTH) || '0');
-            if (type == 'json' && contentType.toLowerCase().startsWith(APPLICATION_JSON) && contentLength > 0) {
+            if (acceptType == 'json' && contentType.toLowerCase().startsWith(APPLICATION_JSON)) {
                 return resp.json();
-            } else if (type == 'blob') {
+            } else if (acceptType == 'blob') {
                 return resp.blob();
+            } else if (acceptType == 'text') {
+                return resp.text();
             }
             return resp;
         }
@@ -539,16 +548,40 @@ export interface HttpClientBuilder {
     withResponseHeadersCallback(responseHeadersCallback: HeaderGetCallback): HttpClientBuilder;
 
     /**
-     * Specifies the type of the request for all requests.
+     * Specifies the accepted type of the response for all requests.
      * <p>Possible types are:</p>
      * <ul>
-     * <li>'json' - when this type is set the client will serialize and deserialize the bodies of the request and response to JSON</li>
-     * <li>'blob' - with this value the client will send the data as FormData and the response will be converted to Blob</li>
-     * <li>'form' - this type will clients send data as FormData and it will return the default response from fetch</li>
+     * <li>'json' - when this type is set the client will deserialize the response to JSON</li>
+     * <li>'blob' - with this value the client will be convert the response to Blob</li>
+     * <li>'text' - using this type, the response will be returned as text</li>
+     * </ul>
+     * @param type the type of the responses accepted
+     */
+    withAcceptType(type: string): HttpClientBuilder;
+
+    /**
+     * Specifies the content type of the request for all requests.
+     * <p>Possible types are:</p>
+     * <ul>
+     * <li>'json' - when this type is set the client will serialize the body of the request</li>
+     * <li>'blob' - with this value the client will send the data as FormData</li>
+     * <li>'form' - this type will clients send data as FormData</li>
      * </ul>
      * @param type the type of the requests
      */
     withType(type: string): HttpClientBuilder;
+
+    /**
+     * Sets option mode for all requests
+     * @param mode the mode
+     */
+    withMode(mode: string): HttpClientBuilder;
+
+    /**
+     * Sets option cache for all requests
+     * @param mode the mode
+     */
+    withCache(cache: string): HttpClientBuilder;
 
     /**
      * Sets a Charset to be used
@@ -573,7 +606,10 @@ class DefaultHttpClientBuilder implements HttpClientBuilder {
     predefHeaders?: any;
     headerSetCallback?: HeaderSetCallback;
     responseHeadersCallback?: HeaderGetCallback;
+    acceptType?: string;
     type?: string;
+    mode?: string;
+    cache?: string;
     charset?: string;
     fetchInvoker?: FetchInvoker;
 
@@ -613,6 +649,11 @@ class DefaultHttpClientBuilder implements HttpClientBuilder {
         return this;
     }
 
+    withAcceptType(type: string): HttpClientBuilder {
+        this.acceptType = type;
+        return this;
+    }
+
     /**
      * Specifies the type of the request for all requests.
      * <p>Possible types are:</p>
@@ -625,6 +666,24 @@ class DefaultHttpClientBuilder implements HttpClientBuilder {
      */
     withType(type: string) {
         this.type = type;
+        return this;
+    }
+
+    /**
+     * Sets option mode for all requests
+     * @param mode the mode
+     */
+    withMode(mode: string) {
+        this.mode = mode;
+        return this;
+    }
+
+    /**
+     * Sets option cache for all requests
+     * @param cache the mode
+     */
+    withCache(cache: string) {
+        this.cache = cache;
         return this;
     }
 
@@ -650,7 +709,7 @@ class DefaultHttpClientBuilder implements HttpClientBuilder {
      * Build the HTTP client
      */
     build() : HttpClient {
-        return new DefaultHttpClient(this.baseUrl, this.predefHeaders, this.headerSetCallback, this.responseHeadersCallback, this.type, this.charset, this.fetchInvoker);
+        return new DefaultHttpClient(this.baseUrl, this.predefHeaders, this.headerSetCallback, this.responseHeadersCallback, this.acceptType, this.type, this.mode, this.cache, this.charset, this.fetchInvoker);
     }
 }
 

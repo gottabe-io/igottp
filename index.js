@@ -321,28 +321,32 @@ function createBlobOptions(ent, instance, options) {
         body: data
     });
 }
-const insertQueryParams = (url, params) => {
-    let _url = new URL(url);
-    Object.entries(params).forEach((e, i) => {
-        if (typeof e[1] != 'undefined' && e[1] != null)
-            _url.searchParams.append(e[0], e[1]);
-    });
-    return _url.toString();
+const insertQueryParams = (url, baseUrl, params) => {
+    let _url = new URL(url, baseUrl || 'http://dummy');
+    if (params)
+        Object.entries(params).forEach((e, i) => {
+            if (typeof e[1] != 'undefined' && e[1] != null)
+                _url.searchParams.append(e[0], e[1]);
+        });
+    return !baseUrl ? _url.toString().substring(12) : _url.toString();
 };
 function setAcceptHeader(type, charset, headers) {
     if (type == 'json')
         headers[exports.HttpHeaders.ACCEPT] = APPLICATION_JSON + (charset ? '; charset=' + charset : '');
 }
 function getType(param, options) {
-    return options.type || param.type;
+    return (options || {}).type || param.type;
 }
 class DefaultHttpClient {
-    constructor(baseUrl, predefHeaders, headerSetCallback, responseHeadersCallback, type, charset, fetchInvoker) {
+    constructor(baseUrl, predefHeaders, headerSetCallback, responseHeadersCallback, acceptType, type, mode, cache, charset, fetchInvoker) {
         this.baseUrl = baseUrl;
         this.predefHeaders = predefHeaders;
         this.headerSetCallback = headerSetCallback;
         this.responseHeadersCallback = responseHeadersCallback;
+        this.acceptType = acceptType;
         this.type = type;
+        this.mode = mode;
+        this.cache = cache;
         this.charset = charset;
         this.fetchInvoker = fetchInvoker || ((url, options) => fetch(url, options));
     }
@@ -388,12 +392,13 @@ class DefaultHttpClient {
         if (this.predefHeaders)
             Object.assign(options.headers || {}, this.predefHeaders);
         this.headerSetCallback && this.headerSetCallback(options.headers);
-        if (this.baseUrl && !url.startsWith('http://') && !url.startsWith('https://'))
-            url = this.baseUrl + (this.baseUrl.startsWith('/') ? '' : '/') + (url.startsWith('/') ? url.substring(1) : url);
-        if (options.hasOwnProperty('params'))
-            url = insertQueryParams(url, options.params);
-        let type = getType(this, options);
-        setAcceptHeader(type, this.charset, options.headers);
+        url = insertQueryParams(url, options.baseUrl || this.baseUrl, options.params);
+        let acceptType = options.acceptType || this.acceptType;
+        setAcceptHeader(acceptType, this.charset, options.headers);
+        if (this.cache && !options.cache)
+            options.cache = this.cache;
+        if (this.mode && !options.mode)
+            options.mode = this.mode;
         let resp = await this.fetchInvoker(url, options);
         this.responseHeadersCallback && this.responseHeadersCallback(resp.headers);
         if (resp.status >= 400 || resp.status < 100) {
@@ -403,12 +408,14 @@ class DefaultHttpClient {
         }
         else {
             let contentType = resp.headers.get(exports.HttpHeaders.CONTENT_TYPE) || '';
-            let contentLength = parseInt(resp.headers.get(exports.HttpHeaders.CONTENT_LENGTH) || '0');
-            if (type == 'json' && contentType.toLowerCase().startsWith(APPLICATION_JSON) && contentLength > 0) {
+            if (acceptType == 'json' && contentType.toLowerCase().startsWith(APPLICATION_JSON)) {
                 return resp.json();
             }
-            else if (type == 'blob') {
+            else if (acceptType == 'blob') {
                 return resp.blob();
+            }
+            else if (acceptType == 'text') {
+                return resp.text();
             }
             return resp;
         }
@@ -447,6 +454,10 @@ class DefaultHttpClientBuilder {
         this.responseHeadersCallback = responseHeadersCallback;
         return this;
     }
+    withAcceptType(type) {
+        this.acceptType = type;
+        return this;
+    }
     /**
      * Specifies the type of the request for all requests.
      * <p>Possible types are:</p>
@@ -459,6 +470,22 @@ class DefaultHttpClientBuilder {
      */
     withType(type) {
         this.type = type;
+        return this;
+    }
+    /**
+     * Sets option mode for all requests
+     * @param mode the mode
+     */
+    withMode(mode) {
+        this.mode = mode;
+        return this;
+    }
+    /**
+     * Sets option cache for all requests
+     * @param cache the mode
+     */
+    withCache(cache) {
+        this.cache = cache;
         return this;
     }
     /**
@@ -481,7 +508,7 @@ class DefaultHttpClientBuilder {
      * Build the HTTP client
      */
     build() {
-        return new DefaultHttpClient(this.baseUrl, this.predefHeaders, this.headerSetCallback, this.responseHeadersCallback, this.type, this.charset, this.fetchInvoker);
+        return new DefaultHttpClient(this.baseUrl, this.predefHeaders, this.headerSetCallback, this.responseHeadersCallback, this.acceptType, this.type, this.mode, this.cache, this.charset, this.fetchInvoker);
     }
 }
 /**
@@ -489,3 +516,4 @@ class DefaultHttpClientBuilder {
  */
 const builder = () => new DefaultHttpClientBuilder();
 exports.builder = builder;
+//# sourceMappingURL=index.js.map
