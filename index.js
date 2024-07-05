@@ -1,4 +1,17 @@
 "use strict";
+/*
+Copyright 2022 gottabe-io
+
+Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
+
+3. Neither the name of the copyright holder nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.builder = exports.HttpHeaders = void 0;
 exports.HttpHeaders = {
@@ -316,7 +329,7 @@ function createJsonOptions(ent, instance, options) {
 }
 function createBlobOptions(ent, instance, options) {
     let data = new FormData();
-    Object.entries(ent).forEach(([k, v]) => data.append(k, v, v instanceof File ? v.name : undefined));
+    Object.entries(ent).forEach(([k, v]) => data.append(k, v));
     return Object.assign({}, options || {}, {
         body: data
     });
@@ -338,7 +351,7 @@ function getType(param, options) {
     return (options || {}).type || param.type;
 }
 class DefaultHttpClient {
-    constructor(baseUrl, predefHeaders, headerSetCallback, responseHeadersCallback, acceptType, type, mode, cache, charset, fetchInvoker) {
+    constructor(baseUrl, predefHeaders, headerSetCallback, responseHeadersCallback, acceptType, type, mode, cache, charset, fetchInvoker, requestInterceptor, responseInterceptor, agent) {
         this.baseUrl = baseUrl;
         this.predefHeaders = predefHeaders;
         this.headerSetCallback = headerSetCallback;
@@ -349,6 +362,9 @@ class DefaultHttpClient {
         this.cache = cache;
         this.charset = charset;
         this.fetchInvoker = fetchInvoker || ((url, options) => fetch(url, options));
+        this.requestInterceptor = requestInterceptor;
+        this.responseInterceptor = responseInterceptor;
+        this.agent = agent;
     }
     get(url, options) {
         return this.request(url, Object.assign({}, options, { method: 'GET' }));
@@ -399,7 +415,13 @@ class DefaultHttpClient {
             options.cache = this.cache;
         if (this.mode && !options.mode)
             options.mode = this.mode;
+        if (this.agent || !options.agent)
+            options.agent = this.agent;
+        if (this.requestInterceptor)
+            this.requestInterceptor({ url, options });
         let resp = await this.fetchInvoker(url, options);
+        if (this.responseInterceptor)
+            this.responseInterceptor(resp);
         this.responseHeadersCallback && this.responseHeadersCallback(resp.headers);
         if (resp.status >= 400 || resp.status < 100) {
             let error = new Error('HTTP status ' + resp.status + ': ' + resp.statusText);
@@ -505,10 +527,34 @@ class DefaultHttpClientBuilder {
         return this;
     }
     /**
+     * Set a request interceptor
+     * @param requestInterceptor
+     */
+    withRequestInterceptor(requestInterceptor) {
+        this.requestInterceptor = requestInterceptor;
+        return this;
+    }
+    /**
+     * Set a response interceptor
+     * @param responseInterceptor
+     */
+    withResponseInterceptor(responseInterceptor) {
+        this.responseInterceptor = responseInterceptor;
+        return this;
+    }
+    /**
+     * Set a agent
+     * @param agent
+     */
+    withAgent(agent) {
+        this.agent = agent;
+        return this;
+    }
+    /**
      * Build the HTTP client
      */
     build() {
-        return new DefaultHttpClient(this.baseUrl, this.predefHeaders, this.headerSetCallback, this.responseHeadersCallback, this.acceptType, this.type, this.mode, this.cache, this.charset, this.fetchInvoker);
+        return new DefaultHttpClient(this.baseUrl, this.predefHeaders, this.headerSetCallback, this.responseHeadersCallback, this.acceptType, this.type, this.mode, this.cache, this.charset, this.fetchInvoker, this.requestInterceptor, this.responseInterceptor, this.agent);
     }
 }
 /**

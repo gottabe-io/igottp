@@ -1,11 +1,11 @@
 {
   "name": "igottp",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "",
   "main": "index.js",
   "typings": "index.d.ts",
   "engines": {
-    "node": ">=16.0.0",
+    "node": ">=18.0.0",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "scripts": {

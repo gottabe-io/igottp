@@ -11,8 +11,16 @@ Redistribution and use in source and binary forms, with or without modification,
 
 THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+
+export interface HttpRequest {
+    url: string;
+    options: RequestInit;
+}
+
 type HeaderSetCallback = (headers: any) => void;
 type HeaderGetCallback = (headers: any) => void;
+type RequestInterceptor = (request: HttpRequest) => void;
+type ResponseInterceptor = (response: Response) => void;
 type FetchInvoker = (url: string, options?: any) => Promise<Response>;
 
 export const HttpHeaders = {
@@ -334,7 +342,7 @@ function createJsonOptions(ent:any, instance: any, options?:any) {
 
 function createBlobOptions(ent:any, instance: any, options?:any) {
     let data = new FormData()
-    Object.entries(ent).forEach(([k,v]) => data.append(k, <any>v, v instanceof File ? v.name : undefined));
+    Object.entries(ent).forEach(([k,v]) => data.append(k, <any>v));
     return Object.assign({}, options || {}, {
         body: data
     });
@@ -433,7 +441,10 @@ class DefaultHttpClient implements HttpClient {
     cache?: string;
     charset?: string;
     fetchInvoker: FetchInvoker;
-    constructor(baseUrl?: string, predefHeaders?: any, headerSetCallback?: HeaderSetCallback, responseHeadersCallback?: HeaderGetCallback, acceptType?: string, type?: string, mode?: string, cache?: string, charset?: string, fetchInvoker?: FetchInvoker) {
+    requestInterceptor?: RequestInterceptor;
+    responseInterceptor?: ResponseInterceptor;
+    agent?: any;
+    constructor(baseUrl?: string, predefHeaders?: any, headerSetCallback?: HeaderSetCallback, responseHeadersCallback?: HeaderGetCallback, acceptType?: string, type?: string, mode?: string, cache?: string, charset?: string, fetchInvoker?: FetchInvoker, requestInterceptor?: RequestInterceptor, responseInterceptor?: ResponseInterceptor, agent?: any) {
         this.baseUrl = baseUrl;
         this.predefHeaders = predefHeaders;
         this.headerSetCallback = headerSetCallback;
@@ -444,6 +455,9 @@ class DefaultHttpClient implements HttpClient {
         this.cache = cache;
         this.charset = charset;
         this.fetchInvoker = fetchInvoker || ((url: string, options?: any) => fetch(url, options));
+        this.requestInterceptor = requestInterceptor;
+        this.responseInterceptor = responseInterceptor;
+        this.agent = agent;
     }
     get (url:string, options?:any) : Promise<Response | any> {
         return this.request(url, Object.assign({}, options, { method: 'GET' }));
@@ -502,7 +516,13 @@ class DefaultHttpClient implements HttpClient {
             options.cache = this.cache;
         if (this.mode && !options.mode)
             options.mode = this.mode;
+        if (this.agent || !options.agent)
+            options.agent = this.agent;
+        if (this.requestInterceptor)
+            this.requestInterceptor({url, options});
         let resp = await this.fetchInvoker(url, options);
+        if (this.responseInterceptor)
+            this.responseInterceptor(resp);
         this.responseHeadersCallback && this.responseHeadersCallback(resp.headers);
         if (resp.status >= 400 || resp.status < 100) {
             let error : any = new Error('HTTP status ' + resp.status + ': ' + resp.statusText);
@@ -579,7 +599,7 @@ export interface HttpClientBuilder {
 
     /**
      * Sets option cache for all requests
-     * @param mode the mode
+     * @param cache the cache mode
      */
     withCache(cache: string): HttpClientBuilder;
 
@@ -594,6 +614,24 @@ export interface HttpClientBuilder {
      * @param fetchInvoker the fetch invoker
      */
     withFetchInvoker(fetchInvoker: FetchInvoker): HttpClientBuilder;
+
+    /**
+     * Set a request interceptor
+     * @param requestInterceptor
+     */
+    withRequestInterceptor(requestInterceptor: RequestInterceptor): HttpClientBuilder;
+
+    /**
+     * Set a response interceptor
+     * @param responseInterceptor
+     */
+    withResponseInterceptor(responseInterceptor: ResponseInterceptor): HttpClientBuilder;
+
+    /**
+     * Set a agent
+     * @param agent
+     */
+    withAgent(agent: any): HttpClientBuilder;
 
     /**
      * Build the HTTP client
@@ -612,6 +650,9 @@ class DefaultHttpClientBuilder implements HttpClientBuilder {
     cache?: string;
     charset?: string;
     fetchInvoker?: FetchInvoker;
+    requestInterceptor?: RequestInterceptor;
+    responseInterceptor?: ResponseInterceptor;
+    agent?: any;
 
     /**
      * The HTTP client will use a base URL for requests
@@ -706,10 +747,37 @@ class DefaultHttpClientBuilder implements HttpClientBuilder {
     }
 
     /**
+     * Set a request interceptor
+     * @param requestInterceptor
+     */
+    withRequestInterceptor(requestInterceptor: RequestInterceptor) {
+        this.requestInterceptor = requestInterceptor;
+        return this;
+    }
+
+    /**
+     * Set a response interceptor
+     * @param responseInterceptor
+     */
+    withResponseInterceptor(responseInterceptor: ResponseInterceptor) {
+        this.responseInterceptor = responseInterceptor;
+        return this;
+    }
+
+    /**
+     * Set a agent
+     * @param agent
+     */
+    withAgent(agent: any) {
+        this.agent = agent;
+        return this;
+    }
+
+    /**
      * Build the HTTP client
      */
     build() : HttpClient {
-        return new DefaultHttpClient(this.baseUrl, this.predefHeaders, this.headerSetCallback, this.responseHeadersCallback, this.acceptType, this.type, this.mode, this.cache, this.charset, this.fetchInvoker);
+        return new DefaultHttpClient(this.baseUrl, this.predefHeaders, this.headerSetCallback, this.responseHeadersCallback, this.acceptType, this.type, this.mode, this.cache, this.charset, this.fetchInvoker, this.requestInterceptor, this.responseInterceptor, this.agent);
     }
 }
 

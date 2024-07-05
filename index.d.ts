@@ -1,5 +1,11 @@
+export interface HttpRequest {
+    url: string;
+    options: RequestInit;
+}
 declare type HeaderSetCallback = (headers: any) => void;
 declare type HeaderGetCallback = (headers: any) => void;
+declare type RequestInterceptor = (request: HttpRequest) => void;
+declare type ResponseInterceptor = (response: Response) => void;
 declare type FetchInvoker = (url: string, options?: any) => Promise<Response>;
 export declare const HttpHeaders: {
     /**
@@ -415,7 +421,7 @@ export interface HttpClientBuilder {
     withMode(mode: string): HttpClientBuilder;
     /**
      * Sets option cache for all requests
-     * @param mode the mode
+     * @param cache the cache mode
      */
     withCache(cache: string): HttpClientBuilder;
     /**
@@ -428,6 +434,21 @@ export interface HttpClientBuilder {
      * @param fetchInvoker the fetch invoker
      */
     withFetchInvoker(fetchInvoker: FetchInvoker): HttpClientBuilder;
+    /**
+     * Set a request interceptor
+     * @param requestInterceptor
+     */
+    withRequestInterceptor(requestInterceptor: RequestInterceptor): HttpClientBuilder;
+    /**
+     * Set a response interceptor
+     * @param responseInterceptor
+     */
+    withResponseInterceptor(responseInterceptor: ResponseInterceptor): HttpClientBuilder;
+    /**
+     * Set a agent
+     * @param agent
+     */
+    withAgent(agent: any): HttpClientBuilder;
     /**
      * Build the HTTP client
      */
@@ -444,6 +465,9 @@ declare class DefaultHttpClientBuilder implements HttpClientBuilder {
     cache?: string;
     charset?: string;
     fetchInvoker?: FetchInvoker;
+    requestInterceptor?: RequestInterceptor;
+    responseInterceptor?: ResponseInterceptor;
+    agent?: any;
     /**
      * The HTTP client will use a base URL for requests
      * @param baseUrl the base URL
@@ -496,6 +520,21 @@ declare class DefaultHttpClientBuilder implements HttpClientBuilder {
      * @param fetchInvoker the fetch invoker
      */
     withFetchInvoker(fetchInvoker: FetchInvoker): this;
+    /**
+     * Set a request interceptor
+     * @param requestInterceptor
+     */
+    withRequestInterceptor(requestInterceptor: RequestInterceptor): this;
+    /**
+     * Set a response interceptor
+     * @param responseInterceptor
+     */
+    withResponseInterceptor(responseInterceptor: ResponseInterceptor): this;
+    /**
+     * Set a agent
+     * @param agent
+     */
+    withAgent(agent: any): this;
     /**
      * Build the HTTP client
      */
