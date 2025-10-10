@@ -351,7 +351,7 @@ function getType(param, options) {
     return (options || {}).type || param.type;
 }
 class DefaultHttpClient {
-    constructor(baseUrl, predefHeaders, headerSetCallback, responseHeadersCallback, acceptType, type, mode, cache, charset, fetchInvoker, requestInterceptor, responseInterceptor, agent) {
+    constructor(baseUrl, predefHeaders, headerSetCallback, responseHeadersCallback, acceptType, type, mode, cache, charset, fetchInvoker, requestInterceptor, responseInterceptor, agent, errorTransformer, responseTransformer) {
         this.baseUrl = baseUrl;
         this.predefHeaders = predefHeaders;
         this.headerSetCallback = headerSetCallback;
@@ -365,6 +365,8 @@ class DefaultHttpClient {
         this.requestInterceptor = requestInterceptor;
         this.responseInterceptor = responseInterceptor;
         this.agent = agent;
+        this.errorTransformer = errorTransformer;
+        this.responseTransformer = responseTransformer;
     }
     get(url, options) {
         return this.request(url, Object.assign({}, options, { method: 'GET' }));
@@ -424,22 +426,34 @@ class DefaultHttpClient {
             this.responseInterceptor(resp);
         this.responseHeadersCallback && this.responseHeadersCallback(resp.headers);
         if (resp.status >= 400 || resp.status < 100) {
-            let error = new Error('HTTP status ' + resp.status + ': ' + resp.statusText);
-            error.response = resp;
-            throw error;
+            if (this.errorTransformer) {
+                let error = await this.errorTransformer(resp);
+                throw error;
+            }
+            else {
+                let error = new Error('HTTP status ' + resp.status + ': ' + resp.statusText);
+                error.response = resp;
+                throw error;
+            }
         }
         else {
-            let contentType = resp.headers.get(exports.HttpHeaders.CONTENT_TYPE) || '';
-            if (acceptType == 'json' && contentType.toLowerCase().startsWith(APPLICATION_JSON)) {
-                return resp.json();
+            if (this.responseTransformer) {
+                let content = await this.responseTransformer(resp);
+                return content;
             }
-            else if (acceptType == 'blob') {
-                return resp.blob();
+            else {
+                let contentType = resp.headers.get(exports.HttpHeaders.CONTENT_TYPE) || '';
+                if (acceptType == 'json' && contentType.toLowerCase().startsWith(APPLICATION_JSON)) {
+                    return resp.json();
+                }
+                else if (acceptType == 'blob') {
+                    return resp.blob();
+                }
+                else if (acceptType == 'text') {
+                    return resp.text();
+                }
+                return resp;
             }
-            else if (acceptType == 'text') {
-                return resp.text();
-            }
-            return resp;
         }
     }
 }
@@ -551,10 +565,26 @@ class DefaultHttpClientBuilder {
         return this;
     }
     /**
+     * Set an error transformer
+     * @param errorTransformer
+     */
+    withErrorTransformer(errorTransformer) {
+        this.errorTransformer = errorTransformer;
+        return this;
+    }
+    /**
+     * Set a response transformer
+     * @param responseTransformer
+     */
+    withResponseTransformer(responseTransformer) {
+        this.responseTransformer = responseTransformer;
+        return this;
+    }
+    /**
      * Build the HTTP client
      */
     build() {
-        return new DefaultHttpClient(this.baseUrl, this.predefHeaders, this.headerSetCallback, this.responseHeadersCallback, this.acceptType, this.type, this.mode, this.cache, this.charset, this.fetchInvoker, this.requestInterceptor, this.responseInterceptor, this.agent);
+        return new DefaultHttpClient(this.baseUrl, this.predefHeaders, this.headerSetCallback, this.responseHeadersCallback, this.acceptType, this.type, this.mode, this.cache, this.charset, this.fetchInvoker, this.requestInterceptor, this.responseInterceptor, this.agent, this.errorTransformer, this.responseTransformer);
     }
 }
 /**

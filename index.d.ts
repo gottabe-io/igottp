@@ -6,6 +6,8 @@ declare type HeaderSetCallback = (headers: any) => void;
 declare type HeaderGetCallback = (headers: any) => void;
 declare type RequestInterceptor = (request: HttpRequest) => void;
 declare type ResponseInterceptor = (response: Response) => void;
+declare type ErrorTransformer<T extends Error> = (response: Response) => Promise<T>;
+declare type ResponseTransformer<T extends Object> = (response: Response) => Promise<T>;
 declare type FetchInvoker = (url: string, options?: any) => Promise<Response>;
 export declare const HttpHeaders: {
     /**
@@ -450,6 +452,16 @@ export interface HttpClientBuilder {
      */
     withAgent(agent: any): HttpClientBuilder;
     /**
+     * Set an error transformer
+     * @param errorTransformer
+     */
+    withErrorTransformer<T extends Error>(errorTransformer: ErrorTransformer<T>): HttpClientBuilder;
+    /**
+     * Set a response transformer
+     * @param responseTransformer
+     */
+    withResponseTransformer<T extends Object>(responseTransformer: ResponseTransformer<T>): HttpClientBuilder;
+    /**
      * Build the HTTP client
      */
     build(): HttpClient;
@@ -468,6 +480,8 @@ declare class DefaultHttpClientBuilder implements HttpClientBuilder {
     requestInterceptor?: RequestInterceptor;
     responseInterceptor?: ResponseInterceptor;
     agent?: any;
+    errorTransformer?: ErrorTransformer<Error>;
+    responseTransformer?: ResponseTransformer<Object>;
     /**
      * The HTTP client will use a base URL for requests
      * @param baseUrl the base URL
@@ -535,6 +549,16 @@ declare class DefaultHttpClientBuilder implements HttpClientBuilder {
      * @param agent
      */
     withAgent(agent: any): this;
+    /**
+     * Set an error transformer
+     * @param errorTransformer
+     */
+    withErrorTransformer<T extends Error>(errorTransformer: ErrorTransformer<T>): HttpClientBuilder;
+    /**
+     * Set a response transformer
+     * @param responseTransformer
+     */
+    withResponseTransformer<T extends Object>(responseTransformer: ResponseTransformer<T>): HttpClientBuilder;
     /**
      * Build the HTTP client
      */

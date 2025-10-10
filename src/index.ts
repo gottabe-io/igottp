@@ -21,6 +21,8 @@ type HeaderSetCallback = (headers: any) => void;
 type HeaderGetCallback = (headers: any) => void;
 type RequestInterceptor = (request: HttpRequest) => void;
 type ResponseInterceptor = (response: Response) => void;
+type ErrorTransformer<T extends Error> = (response: Response) => Promise<T>;
+type ResponseTransformer<T extends Object> = (response: Response) => Promise<T>;
 type FetchInvoker = (url: string, options?: any) => Promise<Response>;
 
 export const HttpHeaders = {
@@ -444,7 +446,9 @@ class DefaultHttpClient implements HttpClient {
     requestInterceptor?: RequestInterceptor;
     responseInterceptor?: ResponseInterceptor;
     agent?: any;
-    constructor(baseUrl?: string, predefHeaders?: any, headerSetCallback?: HeaderSetCallback, responseHeadersCallback?: HeaderGetCallback, acceptType?: string, type?: string, mode?: string, cache?: string, charset?: string, fetchInvoker?: FetchInvoker, requestInterceptor?: RequestInterceptor, responseInterceptor?: ResponseInterceptor, agent?: any) {
+    errorTransformer?:ErrorTransformer<Error>;
+    responseTransformer?:ResponseTransformer<Object>;
+    constructor(baseUrl?: string, predefHeaders?: any, headerSetCallback?: HeaderSetCallback, responseHeadersCallback?: HeaderGetCallback, acceptType?: string, type?: string, mode?: string, cache?: string, charset?: string, fetchInvoker?: FetchInvoker, requestInterceptor?: RequestInterceptor, responseInterceptor?: ResponseInterceptor, agent?: any, errorTransformer?:ErrorTransformer<Error>, responseTransformer?:ResponseTransformer<Object>) {
         this.baseUrl = baseUrl;
         this.predefHeaders = predefHeaders;
         this.headerSetCallback = headerSetCallback;
@@ -458,6 +462,8 @@ class DefaultHttpClient implements HttpClient {
         this.requestInterceptor = requestInterceptor;
         this.responseInterceptor = responseInterceptor;
         this.agent = agent;
+        this.errorTransformer = errorTransformer;
+        this.responseTransformer = responseTransformer;
     }
     get (url:string, options?:any) : Promise<Response | any> {
         return this.request(url, Object.assign({}, options, { method: 'GET' }));
@@ -525,19 +531,29 @@ class DefaultHttpClient implements HttpClient {
             this.responseInterceptor(resp);
         this.responseHeadersCallback && this.responseHeadersCallback(resp.headers);
         if (resp.status >= 400 || resp.status < 100) {
-            let error : any = new Error('HTTP status ' + resp.status + ': ' + resp.statusText);
-            error.response = resp;
-            throw error;
-        } else {
-            let contentType = resp.headers.get(HttpHeaders.CONTENT_TYPE) || '';
-            if (acceptType == 'json' && contentType.toLowerCase().startsWith(APPLICATION_JSON)) {
-                return resp.json();
-            } else if (acceptType == 'blob') {
-                return resp.blob();
-            } else if (acceptType == 'text') {
-                return resp.text();
+            if (this.errorTransformer) {
+                let error = await this.errorTransformer(resp);
+                throw error;
+            } else {
+                let error : any = new Error('HTTP status ' + resp.status + ': ' + resp.statusText);
+                error.response = resp;
+                throw error;
             }
-            return resp;
+        } else {
+            if (this.responseTransformer) {
+                let content = await this.responseTransformer(resp);
+                return content;
+            } else {
+                let contentType = resp.headers.get(HttpHeaders.CONTENT_TYPE) || '';
+                if (acceptType == 'json' && contentType.toLowerCase().startsWith(APPLICATION_JSON)) {
+                    return resp.json();
+                } else if (acceptType == 'blob') {
+                    return resp.blob();
+                } else if (acceptType == 'text') {
+                    return resp.text();
+                }
+                return resp;
+            }
         }
     }
 }
@@ -634,6 +650,16 @@ export interface HttpClientBuilder {
     withAgent(agent: any): HttpClientBuilder;
 
     /**
+     * Set an error transformer
+     * @param errorTransformer 
+     */
+    withErrorTransformer<T extends Error>(errorTransformer: ErrorTransformer<T>): HttpClientBuilder;
+    /**
+     * Set a response transformer
+     * @param responseTransformer 
+     */
+    withResponseTransformer<T extends Object>(responseTransformer: ResponseTransformer<T>): HttpClientBuilder;
+    /**
      * Build the HTTP client
      */
     build() : HttpClient;
@@ -653,6 +679,8 @@ class DefaultHttpClientBuilder implements HttpClientBuilder {
     requestInterceptor?: RequestInterceptor;
     responseInterceptor?: ResponseInterceptor;
     agent?: any;
+    errorTransformer?:ErrorTransformer<Error>;
+    responseTransformer?:ResponseTransformer<Object>;
 
     /**
      * The HTTP client will use a base URL for requests
@@ -774,10 +802,26 @@ class DefaultHttpClientBuilder implements HttpClientBuilder {
     }
 
     /**
+     * Set an error transformer
+     * @param errorTransformer 
+     */
+    withErrorTransformer<T extends Error>(errorTransformer: ErrorTransformer<T>): HttpClientBuilder {
+        this.errorTransformer = errorTransformer;
+        return this;
+    }
+    /**
+     * Set a response transformer
+     * @param responseTransformer 
+     */
+    withResponseTransformer<T extends Object>(responseTransformer: ResponseTransformer<T>): HttpClientBuilder {
+        this.responseTransformer = responseTransformer;
+        return this;
+    }
+    /**
      * Build the HTTP client
      */
     build() : HttpClient {
-        return new DefaultHttpClient(this.baseUrl, this.predefHeaders, this.headerSetCallback, this.responseHeadersCallback, this.acceptType, this.type, this.mode, this.cache, this.charset, this.fetchInvoker, this.requestInterceptor, this.responseInterceptor, this.agent);
+        return new DefaultHttpClient(this.baseUrl, this.predefHeaders, this.headerSetCallback, this.responseHeadersCallback, this.acceptType, this.type, this.mode, this.cache, this.charset, this.fetchInvoker, this.requestInterceptor, this.responseInterceptor, this.agent, this.errorTransformer, this.responseTransformer);
     }
 }
 
